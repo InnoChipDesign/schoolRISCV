@@ -3,7 +3,7 @@
 # Initialize program
 init:   mv      t0, zero
         mv      t1, zero
-        li      t2, 0x20
+        li      t2, 0x14
 
 # Clear memory
 clear:  sw      zero, 0x0 (t0)

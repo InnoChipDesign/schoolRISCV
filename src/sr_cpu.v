@@ -17,13 +17,15 @@ module sr_cpu
     input   [ 4:0]  regAddr,    // debug access reg address
     output  [31:0]  regData,    // debug access reg data
     output  [31:0]  imAddr,     // instruction memory address
-    input   [31:0]  imData      // instruction memory data
+    input   [31:0]  imData,     // instruction memory data
+    output  [31:0]  memAddr,    // general memory address
+    output          memWriteEnable, // do write in memory
+    inout   [31:0]  memData     // data from general memory
 );
     // control wires
     wire        aluZero;
     wire        pcSrc;
     wire        regWrite;
-    wire        memWrite;
     wire        aluSrc;
     wire  [1:0] wdSrc;
     wire  [2:0] aluControl;
@@ -39,15 +41,13 @@ module sr_cpu
     wire [31:0] immS;
     wire [31:0] immB;
     wire [31:0] immU;
-    wire [31:0] memValue;
-    wire [31:0] memAddr;
 
     // program counter
     wire [31:0] pc;
     wire [31:0] pcBranch = pc + immB;
     wire [31:0] pcPlus4  = pc + 4;
     wire [31:0] pcNext   = pcSrc ? pcBranch : pcPlus4;
-    sm_register r_pc(clk ,rst_n, pcNext, pc);
+    sm_register r_pc(clk, rst_n, pcNext, pc);
 
     // program memory access
     assign imAddr = pc >> 2;
@@ -102,17 +102,11 @@ module sr_cpu
         .result     ( aluResult    ) 
     );
 
-    assign memAddr = rd1 + (memWrite ? immS : immI);
+    assign memAddr = rd1 + (memWriteEnable ? immS : immI);
 
-    sm_ram ram (
-        .clk        ( clk        ),
-        .addr       ( memAddr    ),
-        .value      ( rd2        ),
-        .writeEnable( memWrite   ),
-        .result     ( memValue   )
-    );
+    assign memData = memWriteEnable ? rd2 : 'bz;
 
-    assign wd3 = wdSrc[0] ? immU : (wdSrc[1] ? memValue : aluResult);
+    assign wd3 = wdSrc[0] ? immU : (wdSrc[1] ? memData : aluResult);
 
     //control
     sr_control sm_control (
@@ -122,7 +116,7 @@ module sr_cpu
         .aluZero    ( aluZero      ),
         .pcSrc      ( pcSrc        ),
         .regWrite   ( regWrite     ),
-        .memWrite   ( memWrite     ),
+        .memWrite   (memWriteEnable),
         .aluSrc     ( aluSrc       ),
         .wdSrc      ( wdSrc        ),
         .aluControl ( aluControl   ) 
