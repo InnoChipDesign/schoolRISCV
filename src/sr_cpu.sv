@@ -22,7 +22,19 @@ module sr_cpu
     output          memWriteEnable, // do write in memory
     inout   [31:0]  memData     // data from general memory
 );
-    // instruction decode wires
+    // program counter
+    wire [31:0] pc;
+    wire [31:0] pcNextDefault  = pc + 4;
+    sm_register r_pc(clk, rst_n, pcNextDefault, pc);
+
+    // program memory access
+    assign imAddr = pc >> 2;
+
+    // #####################################
+    // ######## INSTURCTION DECODE #########
+    // #####################################
+
+    // ID stage registers
     logic [ 4:0] rd_D;
     logic [ 4:0] rs1_D;
     logic [ 4:0] rs2_D;
@@ -40,47 +52,66 @@ module sr_cpu
     logic        vld_D;
     logic [31:0] pc_D;
 
-    // program counter
-    wire [31:0] pc;
-    wire [31:0] pcPlus4  = pc + 4;
-    sm_register r_pc(clk, rst_n, pcPlus4, pc);
+    // decoded values
+    wire [ 6:0] cmdOp;
+    wire [ 2:0] cmdF3;
+    wire [ 6:0] cmdF7;
+    wire [ 4:0] rd;
+    wire [ 4:0] rs1;
+    wire [ 4:0] rs2;
+    wire [31:0] immI;
+    wire [31:0] immS;
+    wire [31:0] immB;
+    wire [31:0] immU;
 
-    // program memory access
-    assign imAddr = pc >> 2;
-
-    // register file
-    wire [31:0] rd0;
-    wire [31:0] rd1;
-    wire [31:0] rd2;
-    wire [31:0] wd3;
-    // debug register access
-    assign regData = (regAddr != 0) ? rd0 : pc;
-
-    // instructsion decode
-    decode_stage id (
-        .clk        ( clk          ),
-        .rst        ( ~rst_n       ),
-        .instr      ( imData       ),
-        .pc_in      ( pc           ),
-        .inVld      ( 1'b1         ),
-        .outVld     ( vld_D        ),
-        .rd         ( rd_D         ),
-        .rs1        ( rs1_D        ),
-        .rs2        ( rs2_D        ),
-        .immI       ( immI_D       ),
-        .immS       ( immS_D       ),
-        .immB       ( immB_D       ),
-        .immU       ( immU_D       ),
-        .branch     ( branch_D     ),
-        .condZero   ( condZero_D   ),
-        .regWrite   ( regWrite_D   ),
-        .memWrite   ( memWrite_D   ),
-        .aluSrc     ( aluSrc_D     ),
-        .wdSrc      ( wdSrc_D      ),
-        .aluControl ( aluControl_D ),
-        .pc_out     ( pc_D         )
+    instruction_decode id(
+        .instr      ( imData ),
+        .cmdOp      ( cmdOp  ), .cmdF3      ( cmdF3  ), .cmdF7      ( cmdF7  ),
+        .rd         ( rd     ), .rs1        ( rs1    ), .rs2        ( rs2    ),
+        .immI       ( immI   ), .immS       ( immS   ), .immB       ( immB   ),
+        .immU       ( immU   ) 
     );
 
+    // control values
+    wire       branch;
+    wire       condZero;
+    wire       regWrite; 
+    wire       memWrite;
+    wire       aluSrc;
+    wire [1:0] wdSrc;
+    wire [2:0] aluControl;
+
+    instruction_control ic(
+        .cmdOp      ( cmdOp      ), .cmdF3      ( cmdF3      ), .cmdF7      ( cmdF7      ),
+        .branch     ( branch     ), .condZero   ( condZero   ), .regWrite   ( regWrite   ),
+        .memWrite   ( memWrite   ), .aluSrc     ( aluSrc     ), .wdSrc      ( wdSrc      ),
+        .aluControl ( aluControl )
+    );
+
+    always_ff @ (posedge clk) begin
+        vld_D         <=  rst_n ? '1 : '0;
+        rd_D          <=  rd;
+        rs1_D         <=  rs1;
+        rs2_D         <=  rs2;
+        immI_D        <=  immI;
+        immS_D        <=  immS;
+        immB_D        <=  immB;
+        immU_D        <=  immU;
+        branch_D      <=  branch;
+        condZero_D    <=  condZero;
+        regWrite_D    <=  regWrite;
+        memWrite_D    <=  memWrite;
+        aluSrc_D      <=  aluSrc;
+        wdSrc_D       <=  wdSrc;
+        aluControl_D  <=  aluControl;
+        pc_D          <=  pc;
+    end
+
+    // #####################################
+    // ######## INSTURCTION EXECUTE ########
+    // #####################################
+
+    // EX stage registers
     logic        regWrite_E;
     logic        memWrite_E;
     logic        wdSrc_E;
@@ -91,77 +122,85 @@ module sr_cpu
     logic [ 4:0] rd_E;
     logic        vld_E;
 
-    execute_stage ex (
-        .clk             ( clk          ),
-        .rst             ( ~rst_n       ),
-        .inVld           ( vld_D        ),
-        .outVld          ( vld_E        ),
-        .pc              ( pc_D         ),
-        .rd1             ( rd1          ),
-        .rd2             ( rd2          ),
-        .rd_in           ( rd_D         ),
-        .aluSrc          ( aluSrc_D     ),
-        .aluControl      ( aluControl_D ),
-        .branch          ( branch_D     ),
-        .condZero        ( condZero_D   ),
-        .immI            ( immI_D       ),
-        .immS            ( immS_D       ),
-        .immB            ( immB_D       ),
-        .immU            ( immU_D       ),
-        .regWrite_in     ( regWrite_D   ),
-        .memWrite_in     ( memWrite_D   ),
-        .wdSrc_in        ( wdSrc_D      ),
-        .regWrite_out    ( regWrite_E   ),
-        .memWrite_out    ( memWrite_E   ),
-        .wdSrc_out       ( wdSrc_E      ),
-        .wData           ( wData_E      ),
-        .memAddr         ( memAddr_E    ),
-        .memData         ( memData_E    ),
-        .pcNext          ( pcNext_E     ),
-        .rd_out          ( rd_E         )
+    // register file wires
+    wire [31:0] rd1;
+    wire [31:0] rd2;
+
+    // execution values
+    wire [31:0] aluResult;
+    wire        aluZero;
+    wire [31:0] srcB        = aluSrc_D ? immI_D : rd2;
+    wire [31:0] pcBranch    = pc_D + immB_D;
+    wire [31:0] pcPlus4     = pc_D + 4;
+    wire        pcSrc       = branch_D & (aluZero == condZero_D);
+    wire [31:0] pcNext_new  = pcSrc ? pcBranch : pcPlus4;
+
+    // ALU
+    sr_alu alu (
+        .srcA       ( rd1          ),
+        .srcB       ( srcB         ),
+        .oper       ( aluControl   ),
+        .zero       ( aluZero      ),
+        .result     ( aluResult    ) 
     );
 
-    logic   [31:0]  regWrite_M;
+    always_ff @ (posedge clk) begin
+        vld_E         <=  rst_n ? vld_D : 1'b0;  
+        regWrite_E    <=  regWrite_D;
+        memWrite_E    <=  memWrite_D;
+        wdSrc_E       <=  wdSrc_D[1]; // is_from_mem
+        wData_E       <=  wdSrc_D[0] ? immU_D : aluResult;
+        memAddr_E     <=  rd1 + (memWrite_D ? immS_D : immI_D);
+        memData_E     <=  rd2;
+        pcNext_E      <=  pcNext_new;
+        rd_E          <=  rd_D;
+    end
+
+    // #####################################
+    // ########### MEMORY ACCESS ###########
+    // #####################################
+
+    // MEM stage registers
+    logic           regWrite_M;
     logic   [31:0]  pcNext_M;
+    logic   [31:0]  wData_M;
     logic   [ 4:0]  rd_M;
     logic           vld_M;
+    
+    // memory access values
+    wire [31:0] wData = wdSrc_E ? memData : wData_E;
 
     assign memAddr = memAddr_E;
     assign memWriteEnable = memWrite_E & vld_E;
     assign memData = memWriteEnable ? memData_E : 'bz;
+    
+    always_ff @ (posedge clk) begin
+        vld_M           <=  rst_n ? vld_E : 1'b0;
+        wData_M         <=  wData;
+        regWrite_M      <=  regWrite_E;
+        pcNext_M        <=  pcNext_E;
+        rd_M            <=  rd_E;
+    end
 
-    memory_access_stage ma (
-        .clk             ( clk           ),
-        .rst             ( ~rst_n        ),
-        .inVld           ( vld_E         ),
-        .outVld          ( vld_M         ),
-        .regWrite_in     ( regWrite_E    ),
-        .wData_in        ( wData_E       ),
-        .pcNext_in       ( pcNext_E      ),
-        .wdSrc           ( wdSrc_E       ),
-        .memData         ( memData       ),
-        .rd_in           ( rd_E          ),
-        .regWrite_out    ( regWrite_M    ),
-        .wData_out       ( wd3           ), // connect to register file
-        .pcNext          ( pcNext_M      ),
-        .rd_out          ( rd_M          )
-    );
+    // #####################################
+    // ######## REGISTER WRITE BACK ########
+    // #####################################
 
-    wire        regWrite = regWrite_M & vld_M;
-
+    // debug register access
+    wire [31:0] rd0;
+    assign regData = (regAddr != 0) ? rd0 : pc;
     sm_register_file rf (
-        .clk        ( clk          ),
-        .a0         ( regAddr      ),
-        .a1         ( rs1_D        ),
-        .a2         ( rs2_D        ),
-        .a3         ( rd_M         ),
-        .rd0        ( rd0          ),
-        .rd1        ( rd1          ),
-        .rd2        ( rd2          ),
-        .wd3        ( wd3          ),
-        .we3        ( regWrite     )
+        .clk        ( clk                ),
+        .a0         ( regAddr            ),
+        .a1         ( rs1_D              ),
+        .a2         ( rs2_D              ),
+        .a3         ( rd_M               ),
+        .rd0        ( rd0                ),
+        .rd1        ( rd1                ),
+        .rd2        ( rd2                ),
+        .wd3        ( wData_M            ),
+        .we3        ( regWrite_M & vld_M )
     );
-
 endmodule
 
 module instruction_decode
@@ -228,192 +267,6 @@ module instruction_control
             { `RVF7_ANY,  `RVF3_WORD, `RVOP_LOAD } : begin regWrite = 1'b1; wdSrc[1] = 1'b1; end
             { `RVF7_ANY,  `RVF3_WORD, `RVOP_STORE } : begin memWrite = 1'b1; end
         endcase
-    end
-endmodule
-
-module decode_stage
-(
-    input                   clk,
-    input                   rst,
-    input           [31:0]  instr,
-    input           [31:0]  pc_in,
-    input                   inVld,
-    output logic            outVld,
-    output logic    [ 4:0]  rd,
-    output logic    [ 4:0]  rs1,
-    output logic    [ 4:0]  rs2,
-    output logic    [31:0]  immI,
-    output logic    [31:0]  immS,
-    output logic    [31:0]  immB,
-    output logic    [31:0]  immU,
-    output logic            branch,
-    output logic            condZero,
-    output logic            regWrite, 
-    output logic            memWrite,
-    output logic            aluSrc,
-    output logic    [1:0]   wdSrc,
-    output logic    [2:0]   aluControl,
-    output logic    [31:0]  pc_out
-);
-    logic [ 6:0] cmdOp;
-    logic [ 2:0] cmdF3;
-    logic [ 6:0] cmdF7;
-
-    logic [ 4:0] rd_new;
-    logic [ 4:0] rs1_new;
-    logic [ 4:0] rs2_new;
-    logic [31:0] immI_new;
-    logic [31:0] immS_new;
-    logic [31:0] immB_new;
-    logic [31:0] immU_new;
-
-    instruction_decode id(
-        .instr      ( instr      ),
-        .cmdOp      ( cmdOp      ),
-        .cmdF3      ( cmdF3      ),
-        .cmdF7      ( cmdF7      ),
-        .rd         ( rd_new     ),
-        .rs1        ( rs1_new    ),
-        .rs2        ( rs2_new    ),
-        .immI       ( immI_new   ),
-        .immS       ( immS_new   ),
-        .immB       ( immB_new   ),
-        .immU       ( immU_new   ) 
-    );
-    
-    logic       branch_new;
-    logic       condZero_new;
-    logic       regWrite_new; 
-    logic       memWrite_new;
-    logic       aluSrc_new;
-    logic [1:0] wdSrc_new;
-    logic [2:0] aluControl_new;
-
-    instruction_control ic(
-        .cmdOp      ( cmdOp          ),
-        .cmdF3      ( cmdF3          ),
-        .cmdF7      ( cmdF7          ),
-        .branch     ( branch_new     ),
-        .condZero   ( condZero_new   ),
-        .regWrite   ( regWrite_new   ),
-        .memWrite   ( memWrite_new   ),
-        .aluSrc     ( aluSrc_new     ),
-        .wdSrc      ( wdSrc_new      ),
-        .aluControl ( aluControl_new )
-    );
-
-    always_ff @ (posedge clk) begin
-        outVld      <=  rst ? 1'b0 : inVld;
-        rd          <=  rd_new;
-        rs1         <=  rs1_new;
-        rs2         <=  rs2_new;
-        immI        <=  immI_new;
-        immS        <=  immS_new;
-        immB        <=  immB_new;
-        immU        <=  immU_new;
-        branch      <=  branch_new;
-        condZero    <=  condZero_new;
-        regWrite    <=  regWrite_new;
-        memWrite    <=  memWrite_new;
-        aluSrc      <=  aluSrc_new;
-        wdSrc       <=  wdSrc_new;
-        aluControl  <=  aluControl_new;
-        pc_out      <=  pc_in;
-    end
-endmodule
-
-module execute_stage
-(
-    input                   clk,
-    input                   rst,
-    input                   inVld,
-    output logic            outVld,
-
-    input logic     [31:0]  pc,
-    input logic     [31:0]  rd1,
-    input logic     [31:0]  rd2,
-    input logic             aluSrc,
-    input logic     [2:0]   aluControl,
-    input logic             branch,
-    input logic             condZero,
-    input logic     [31:0]  immI,
-    input logic     [31:0]  immS,
-    input logic     [31:0]  immB,
-    input logic     [31:0]  immU,
-
-    input logic     [ 4:0]  rd_in,
-    input logic             regWrite_in, 
-    input logic             memWrite_in,
-    input logic     [1:0]   wdSrc_in,
-
-    output logic            regWrite_out, 
-    output logic            memWrite_out,
-    output logic            wdSrc_out,
-    output logic    [ 4:0]  rd_out,
-
-    output logic    [31:0]  wData,
-    output logic    [31:0]  memAddr,
-    output logic    [31:0]  memData,
-    output logic    [31:0]  pcNext
-);
-    wire [31:0] srcB = aluSrc ? immI : rd2;
-    wire [31:0] aluResult;
-    logic aluZero;
-
-    wire [31:0] pcBranch    = pc + immB;
-    wire [31:0] pcPlus4     = pc + 4;
-    wire        pcSrc       = branch & (aluZero == condZero);
-    wire [31:0] pcNext_new  = pcSrc ? pcBranch : pcPlus4;
-
-    sr_alu alu (
-        .srcA       ( rd1          ),
-        .srcB       ( srcB         ),
-        .oper       ( aluControl   ),
-        .zero       ( aluZero      ),
-        .result     ( aluResult    ) 
-    );
-
-    always_ff @ (posedge clk) begin
-        outVld          <=  rst ? 1'b0 : inVld;;  
-        regWrite_out    <=  regWrite_in;
-        memWrite_out    <=  memWrite_in;
-        wdSrc_out       <=  wdSrc_in[1]; // is_from_mem
-        wData           <=  wdSrc_in[0] ? immU : aluResult;
-        memAddr         <=  rd1 + (memWrite_in ? immS : immI);
-        memData         <=  rd2;      
-        pcNext          <=  pcNext_new;
-        rd_out          <=  rd_in;
-    end
-endmodule
-
-module memory_access_stage
-(
-    input                   clk,
-    input                   rst,
-    input                   inVld,
-    output logic            outVld,
-
-    input logic             regWrite_in,
-    input logic    [31:0]   wData_in,
-    input logic    [31:0]   pcNext_in,
-    input logic    [31:0]   memData,
-    input logic    [ 4:0]   rd_in,
-
-    input logic             wdSrc,
-
-    output logic   [31:0]   regWrite_out,
-    output logic   [31:0]   wData_out,
-    output logic   [31:0]   pcNext,
-    output logic   [ 4:0]   rd_out
-);
-    wire    [31:0] wData = wdSrc ? memData : wData_in;
-    
-    always_ff @ (posedge clk) begin
-        outVld          <=  rst ? 1'b0 : inVld;;
-        regWrite_out    <=  regWrite_in;
-        wData_out       <=  wData;
-        pcNext          <=  pcNext_in;
-        rd_out          <=  rd_in;
     end
 endmodule
 
