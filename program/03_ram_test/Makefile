@@ -77,13 +77,14 @@ modelsim: program.hex
 # simulation in Icarus verilog
 
 TOPMODULE=sm_testbench
-IVARG = -g2005
+IVARG = -g2005-sv
 IVARG += -D ICARUS
 IVARG += -I ../
 IVARG += -I ../../../src
 IVARG += -I ../../../testbench
 IVARG += -s $(TOPMODULE)
 IVARG += ../../../src/*.v
+IVARG += ../../../src/*.sv
 IVARG += ../../../testbench/*.v
 
 # make icarus - run compilation using Icarus Verilog simulator

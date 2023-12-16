@@ -1,4 +1,4 @@
-module sm_ram
+module int_ram
 #(
     parameter SIZE = 64
 )
@@ -8,12 +8,11 @@ module sm_ram
     input         writeEnable,
     inout  [31:0] data
 );
-    reg [31:0] ram_contents [SIZE - 1:0];
+    logic [31:0] ram_contents [SIZE - 1:0];
 
     assign data = writeEnable ? 'bz : ram_contents[addr];
 
-    always @ (posedge clk)
-        if (writeEnable)
-            ram_contents[addr] = data;
+    always_ff @ (posedge clk)
+        if (writeEnable) ram_contents[addr] <= data;
 
 endmodule
