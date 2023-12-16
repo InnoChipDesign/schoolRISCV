@@ -22,14 +22,6 @@ module sr_cpu
     output          memWriteEnable, // do write in memory
     inout   [31:0]  memData     // data from general memory
 );
-    // program counter
-    wire [31:0] pc;
-    wire [31:0] pcNextDefault  = pc + 4;
-    sm_register r_pc(clk, rst_n, pcNextDefault, pc);
-
-    // program memory access
-    assign imAddr = pc >> 2;
-
     // #####################################
     // ######## INSTURCTION DECODE #########
     // #####################################
@@ -51,6 +43,18 @@ module sr_cpu
     logic [2:0]  aluControl_D;
     logic        vld_D;
     logic [31:0] pc_D;
+
+    // program counter stuff
+    wire [31:0] pc;
+    wire [31:0] pcPlus4  = pc + 4;
+    wire [31:0] pcOverride;
+    wire        pcSrc;
+    // if last instruction decode was valid & we should branch according to current EX
+    wire [31:0] nextPcAddr = pcSrc & vld_D ? pcOverride : pcPlus4;
+    sm_register r_pc(clk, rst_n, nextPcAddr, pc);
+
+    // program memory access
+    assign imAddr = pc >> 2;
 
     // decoded values
     wire [ 6:0] cmdOp;
@@ -89,7 +93,8 @@ module sr_cpu
     );
 
     always_ff @ (posedge clk) begin
-        vld_D         <=  rst_n ? '1 : '0;
+        // if pcSrc == 1, flush all the pipeline stages before EX
+        vld_D         <=  rst_n ? ~(pcSrc & vld_D) : '0;
         rd_D          <=  rd;
         rs1_D         <=  rs1;
         rs2_D         <=  rs2;
@@ -118,7 +123,6 @@ module sr_cpu
     logic [31:0] wData_E;
     logic [31:0] memAddr_E;
     logic [31:0] memData_E;
-    logic [31:0] pcNext_E;
     logic [ 4:0] rd_E;
     logic        vld_E;
 
@@ -130,16 +134,15 @@ module sr_cpu
     wire [31:0] aluResult;
     wire        aluZero;
     wire [31:0] srcB        = aluSrc_D ? immI_D : rd2;
-    wire [31:0] pcBranch    = pc_D + immB_D;
-    wire [31:0] pcPlus4     = pc_D + 4;
-    wire        pcSrc       = branch_D & (aluZero == condZero_D);
-    wire [31:0] pcNext_new  = pcSrc ? pcBranch : pcPlus4;
+    assign      pcOverride  = pc_D + immB_D;
+    assign      pcSrc       = branch_D & (aluZero == condZero_D);
+    wire [31:0] memAddr_new = rd1 + (memWrite_D ? immS_D : immI_D);
 
     // ALU
     sr_alu alu (
         .srcA       ( rd1          ),
         .srcB       ( srcB         ),
-        .oper       ( aluControl   ),
+        .oper       ( aluControl_D ),
         .zero       ( aluZero      ),
         .result     ( aluResult    ) 
     );
@@ -150,9 +153,8 @@ module sr_cpu
         memWrite_E    <=  memWrite_D;
         wdSrc_E       <=  wdSrc_D[1]; // is_from_mem
         wData_E       <=  wdSrc_D[0] ? immU_D : aluResult;
-        memAddr_E     <=  rd1 + (memWrite_D ? immS_D : immI_D);
+        memAddr_E     <=  memAddr_new;
         memData_E     <=  rd2;
-        pcNext_E      <=  pcNext_new;
         rd_E          <=  rd_D;
     end
 
@@ -162,7 +164,6 @@ module sr_cpu
 
     // MEM stage registers
     logic           regWrite_M;
-    logic   [31:0]  pcNext_M;
     logic   [31:0]  wData_M;
     logic   [ 4:0]  rd_M;
     logic           vld_M;
@@ -178,7 +179,6 @@ module sr_cpu
         vld_M           <=  rst_n ? vld_E : 1'b0;
         wData_M         <=  wData;
         regWrite_M      <=  regWrite_E;
-        pcNext_M        <=  pcNext_E;
         rd_M            <=  rd_E;
     end
 
