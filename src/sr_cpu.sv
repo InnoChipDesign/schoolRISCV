@@ -195,6 +195,9 @@ module sr_cpu
         .a1         ( rs1_D              ),
         .a2         ( rs2_D              ),
         .a3         ( rd_M               ),
+        .exFwdA     ( rd_E               ),
+        .exFwdD     ( wData_E            ),
+        .exFwdVld   ( vld_E & ~wdSrc_E & regWrite_E ),
         .rd0        ( rd0                ),
         .rd1        ( rd1                ),
         .rd2        ( rd2                ),
@@ -299,6 +302,9 @@ module sm_register_file
     input  [ 4:0] a1,
     input  [ 4:0] a2,
     input  [ 4:0] a3,
+    input  [ 4:0] exFwdA,
+    input  [31:0] exFwdD,
+    input         exFwdVld,
     output [31:0] rd0,
     output [31:0] rd1,
     output [31:0] rd2,
@@ -307,9 +313,14 @@ module sm_register_file
 );
     reg [31:0] rf [31:0];
 
-    assign rd0 = (a0 != 0) ? rf [a0] : 32'b0;
-    assign rd1 = (a1 != 0) ? rf [a1] : 32'b0;
-    assign rd2 = (a2 != 0) ? rf [a2] : 32'b0;
+    wire wrFwd1 = (a1 == a3) && we3;
+    wire wrFwd2 = (a2 == a3) && we3;
+    wire exFwd1  = (a1 == exFwdA) && exFwdVld;
+    wire exFwd2  = (a2 == exFwdA) && exFwdVld;
+
+    assign rd0 = (a0 == 0) ? 32'b0 : rf[a0];
+    assign rd1 = (a1 == 0) ? 32'b0 : (exFwd1 ? exFwdD : (wrFwd1 ? wd3 : rf[a1]));
+    assign rd2 = (a2 == 0) ? 32'b0 : (exFwd2 ? exFwdD : (wrFwd2 ? wd3 : rf[a2]));
 
     always @ (posedge clk)
         if(we3) rf [a3] <= wd3;

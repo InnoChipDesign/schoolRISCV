@@ -13,7 +13,7 @@
 `include "sr_cpu.vh"
 
 `ifndef SIMULATION_CYCLES
-    `define SIMULATION_CYCLES 120
+    `define SIMULATION_CYCLES 150
 `endif
 
 module sm_testbench;
@@ -118,6 +118,8 @@ module sm_testbench;
                   cycle, sm_top.sm_cpu.pc, sm_top.sm_cpu.imData, sm_top.sm_cpu.rf.rf[10]);
 
         disasmInstr();
+
+        if (sm_top.sm_cpu.pcSrc && sm_top.sm_cpu.vld_D) $write(" [Branch miss]");
 
         $write("\n");
 
