@@ -12,6 +12,8 @@ clear:  sw      zero, 0x0 (t0)
 
 # Loop memory updates
 loop:
+        lw      a0  0x10 (zero)
+        lw      a1  0x04 (zero)
         mv      t0, zero
 
 # Loop through memory range

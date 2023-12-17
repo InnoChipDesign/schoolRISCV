@@ -22,10 +22,6 @@ module sr_cpu
     output          memWriteEnable, // do write in memory
     inout   [31:0]  memData     // data from general memory
 );
-    // #####################################
-    // ######## INSTURCTION DECODE #########
-    // #####################################
-
     // ID stage registers
     logic [ 4:0] rd_D;
     logic [ 4:0] rs1_D;
@@ -44,17 +40,36 @@ module sr_cpu
     logic        vld_D;
     logic [31:0] pc_D;
 
+    // EX stage registers
+    logic        regWrite_E;
+    logic        memWrite_E;
+    logic        wdSrc_E;
+    logic [31:0] wData_E;
+    logic [31:0] memAddr_E;
+    logic [31:0] memData_E;
+    logic [ 4:0] rd_E;
+    logic        vld_E;
+
+    // #####################################
+    // ######## INSTURCTION DECODE #########
+    // #####################################
+
     // program counter stuff
     wire [31:0] pc;
-    wire [31:0] pcPlus4  = pc + 4;
-    wire [31:0] pcOverride;
+    wire [31:0] pcBranch;
     wire        pcSrc;
+    wire        doBranch = pcSrc & vld_D;
+    // check if we need to bubble
+    // if will write to register, AND write from memory, AND the destination is one of the source registers AND both stages are valid
+    wire makeBubble = vld_D && vld_E && regWrite_E && wdSrc_E && (rd_E == rs1_D || rd_E == rs2_D);
+    wire [31:0] pcAdj    = makeBubble ? pc_D : pc;
+    wire [31:0] pcPlus4  = pcAdj + 4;
     // if last instruction decode was valid & we should branch according to current EX
-    wire [31:0] nextPcAddr = pcSrc & vld_D ? pcOverride : pcPlus4;
+    wire [31:0] nextPcAddr = doBranch ? pcBranch : pcPlus4;
     sm_register r_pc(clk, rst_n, nextPcAddr, pc);
 
     // program memory access
-    assign imAddr = pc >> 2;
+    assign imAddr = pcAdj >> 2;
 
     // decoded values
     wire [ 6:0] cmdOp;
@@ -94,7 +109,7 @@ module sr_cpu
 
     always_ff @ (posedge clk) begin
         // if pcSrc == 1, flush all the pipeline stages before EX
-        vld_D         <=  rst_n ? ~(pcSrc & vld_D) : '0;
+        vld_D         <=  rst_n ? ~doBranch : '0;
         rd_D          <=  rd;
         rs1_D         <=  rs1;
         rs2_D         <=  rs2;
@@ -109,22 +124,12 @@ module sr_cpu
         aluSrc_D      <=  aluSrc;
         wdSrc_D       <=  wdSrc;
         aluControl_D  <=  aluControl;
-        pc_D          <=  pc;
+        pc_D          <=  pcAdj;
     end
 
     // #####################################
     // ######## INSTURCTION EXECUTE ########
     // #####################################
-
-    // EX stage registers
-    logic        regWrite_E;
-    logic        memWrite_E;
-    logic        wdSrc_E;
-    logic [31:0] wData_E;
-    logic [31:0] memAddr_E;
-    logic [31:0] memData_E;
-    logic [ 4:0] rd_E;
-    logic        vld_E;
 
     // register file wires
     wire [31:0] rd1;
@@ -134,7 +139,7 @@ module sr_cpu
     wire [31:0] aluResult;
     wire        aluZero;
     wire [31:0] srcB        = aluSrc_D ? immI_D : rd2;
-    assign      pcOverride  = pc_D + immB_D;
+    assign      pcBranch    = pc_D + immB_D;
     assign      pcSrc       = branch_D & (aluZero == condZero_D);
     wire [31:0] memAddr_new = rd1 + (memWrite_D ? immS_D : immI_D);
 
@@ -148,7 +153,7 @@ module sr_cpu
     );
 
     always_ff @ (posedge clk) begin
-        vld_E         <=  rst_n ? vld_D : 1'b0;  
+        vld_E         <=  rst_n ? (vld_D && ~makeBubble) : 1'b0;  
         regWrite_E    <=  regWrite_D;
         memWrite_E    <=  memWrite_D;
         wdSrc_E       <=  wdSrc_D[1]; // is_from_mem
@@ -188,7 +193,7 @@ module sr_cpu
 
     // debug register access
     wire [31:0] rd0;
-    assign regData = (regAddr != 0) ? rd0 : pc;
+    assign regData = (regAddr != 0) ? rd0 : pcAdj;
     sm_register_file rf (
         .clk        ( clk                ),
         .a0         ( regAddr            ),
