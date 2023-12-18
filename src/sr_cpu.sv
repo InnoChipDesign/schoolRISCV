@@ -262,6 +262,7 @@ module instruction_control
         casez( {cmdF7, cmdF3, cmdOp} )
             { `RVF7_ADD,  `RVF3_ADD,  `RVOP_ADD  } : begin regWrite = 1'b1; aluControl = `ALU_ADD;  end
             { `RVF7_OR,   `RVF3_OR,   `RVOP_OR   } : begin regWrite = 1'b1; aluControl = `ALU_OR;   end
+            { `RVF7_AND,  `RVF3_AND,  `RVOP_AND  } : begin regWrite = 1'b1; aluControl = `ALU_AND;   end
             { `RVF7_SRL,  `RVF3_SRL,  `RVOP_SRL  } : begin regWrite = 1'b1; aluControl = `ALU_SRL;  end
             { `RVF7_SLTU, `RVF3_SLTU, `RVOP_SLTU } : begin regWrite = 1'b1; aluControl = `ALU_SLTU; end
             { `RVF7_SUB,  `RVF3_SUB,  `RVOP_SUB  } : begin regWrite = 1'b1; aluControl = `ALU_SUB;  end
@@ -291,6 +292,7 @@ module sr_alu
             default   : result = srcA + srcB;
             `ALU_ADD  : result = srcA + srcB;
             `ALU_OR   : result = srcA | srcB;
+            `ALU_AND  : result = srcA & srcB;
             `ALU_SRL  : result = srcA >> srcB [4:0];
             `ALU_SLTU : result = (srcA < srcB) ? 1 : 0;
             `ALU_SUB : result = srcA - srcB;

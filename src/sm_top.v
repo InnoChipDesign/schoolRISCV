@@ -8,7 +8,7 @@
  *                        Aleksandr Romanov 
  */ 
 
-//hardware top level module
+// hardware top level module
 module sm_top
 (
     input           clkIn,
@@ -17,9 +17,12 @@ module sm_top
     input           clkEnable,
     output          clk,
     input   [ 4:0 ] regAddr,
-    output  [31:0 ] regData
+    output  [31:0 ] regData,
+    output  [31:0 ] busAddr,
+    output          ioWriteEnable,
+    inout   [31:0 ] ioData
 );
-    //metastability input filters
+    // metastability input filters
     wire    [ 3:0 ] divide;
     wire            enable;
     wire    [ 4:0 ] addr;
@@ -28,9 +31,9 @@ module sm_top
     sm_debouncer #(.SIZE(1)) f1(clkIn, clkEnable, enable);
     sm_debouncer #(.SIZE(5)) f2(clkIn, regAddr,   addr  );
 
-    //cores
-    //clock divider
-    sm_clk_divider sm_clk_divider
+    // cores
+    // clock divider
+    sm_clk_divider #(.bypass(0)) sm_clk_divider
     (
         .clkIn      ( clkIn     ),
         .rst_n      ( rst_n     ),
@@ -39,15 +42,14 @@ module sm_top
         .clkOut     ( clk       )
     );
 
-    //instruction memory
+    // instruction memory
     wire    [31:0]  imAddr;
     wire    [31:0]  imData;
     sm_rom reset_rom(imAddr, imData);
 
-    wire    [31:0]  memAddr;
-    wire    [31:0]  memData;
-    wire            memWriteEnable;
-    int_ram cpu_ram(.clk(clk), .addr(memAddr), .writeEnable(memWriteEnable), .data(memData));
+    wire    [31:0]  busData;
+    wire            busWriteEnable;
+    data_bus dbus(.clk(clk), .addr(busAddr), .writeEnable(busWriteEnable), .data(busData), .ioWriteEnable(ioWriteEnable), .ioData(ioData));
 
     sr_cpu sm_cpu
     (
@@ -57,14 +59,14 @@ module sm_top
         .regData    ( regData   ),
         .imAddr     ( imAddr    ),
         .imData     ( imData    ),
-        .memAddr    ( memAddr   ),
-        .memWriteEnable(memWriteEnable),
-        .memData    ( memData   )
+        .memAddr    ( busAddr   ),
+        .memWriteEnable(busWriteEnable),
+        .memData    ( busData   )
     );
 
 endmodule
 
-//metastability input debouncer module
+// metastability input debouncer module
 module sm_debouncer
 #(
     parameter SIZE = 1
@@ -83,7 +85,7 @@ module sm_debouncer
 
 endmodule
 
-//tunable clock divider
+// tunable clock divider
 module sm_clk_divider
 #(
     parameter shift  = 16,
