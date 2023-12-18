@@ -5,7 +5,7 @@ init:   li      a2, 1024       # max value
         li      t3, 1
 
 loop:   mv      t0, a1
-        lw      t2, 0x8 (zero)
+        lw      t2, 0xc (zero) # load switches state
         nop
         nop
         nop
@@ -23,7 +23,7 @@ skip:
         mv      t1, zero
 
 fwd:    or      t2, t0, t1
-        sw      t2, 0x0 (zero)
+        sw      t2, 0x4 (zero) # set LED state
         add     t0, t0, t0
         beq     t1, a1, bcwd
         srl     t1, t1, a1
@@ -31,7 +31,7 @@ fwd:    or      t2, t0, t1
         
 bcwd:   srl     t0, t0, a1
         or      t2, t0, t1
-        sw      t2, 0x0 (zero)
+        sw      t2, 0x4 (zero) # set LED state
         add     t1, t1, t1
         bne     t0, a1, bcwd
 

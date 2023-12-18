@@ -45,7 +45,7 @@ module sm_top
     // instruction memory
     wire    [31:0]  imAddr;
     wire    [31:0]  imData;
-    sm_rom reset_rom(imAddr, imData);
+    sm_rom #(.SIZE(128)) reset_rom(imAddr, imData);
 
     wire    [31:0]  busData;
     wire            busWriteEnable;
