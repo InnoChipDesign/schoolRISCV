@@ -58,13 +58,12 @@ module sr_cpu
     wire [31:0] pc;
     wire [31:0] pcBranch;
     wire        pcSrc;
-    wire        doBranch = pcSrc & vld_D;
     // check if we need to bubble
     // if will write to register, AND write from memory, AND the destination is one of the source registers AND both stages are valid
-    wire makeBubble = vld_D && vld_E && regWrite_E && wdSrc_E && (rd_E == rs1_D || rd_E == rs2_D);
+    wire        makeBubble = vld_D && vld_E && regWrite_E && wdSrc_E && (rd_E == rs1_D || rd_E == rs2_D);
+    wire        doBranch = pcSrc & vld_D & ~makeBubble;
     wire [31:0] pcAdj    = makeBubble ? pc_D : pc;
     wire [31:0] pcPlus4  = pcAdj + 4;
-    // if last instruction decode was valid & we should branch according to current EX
     wire [31:0] nextPcAddr = doBranch ? pcBranch : pcPlus4;
     sm_register r_pc(clk, rst_n, nextPcAddr, pc);
 

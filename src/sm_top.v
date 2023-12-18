@@ -33,10 +33,10 @@ module sm_top
 
     // cores
     // clock divider
-    sm_clk_divider #(.bypass(0)) sm_clk_divider
+    sm_clk_divider #(.shift(16)) sm_clk_divider
     (
         .clkIn      ( clkIn     ),
-        .rst_n      ( rst_n     ),
+        .rst_n      ( 1'b1      ),
         .divide     ( divide    ),
         .enable     ( enable    ),
         .clkOut     ( clk       )
