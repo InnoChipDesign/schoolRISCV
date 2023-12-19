@@ -87,7 +87,7 @@ module sm_hex_display_8
         else
         begin
             seven_segments <=   bcd_to_seg (number [i * 4 +: 4]);
-            dot            <= ~ 1'b00;
+            dot            <= ~ 1'b0;
             anodes         <= ~ (1 << i);
 
             i <= i + 1;

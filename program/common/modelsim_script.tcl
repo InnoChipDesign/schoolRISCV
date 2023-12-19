@@ -3,10 +3,11 @@
 vlib work
 
 # compile sources
-vlog -vlog01compat \
+vlog \
      +incdir+../../../src \
      +incdir+../../../testbench \
      ../../../src/*.v \
+     ../../../src/*.sv \
      ../../../testbench/*.v
 
 # run simulator

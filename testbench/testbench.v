@@ -13,7 +13,7 @@
 `include "sr_cpu.vh"
 
 `ifndef SIMULATION_CYCLES
-    `define SIMULATION_CYCLES 120
+    `define SIMULATION_CYCLES 150
 `endif
 
 module sm_testbench;
@@ -44,7 +44,7 @@ module sm_testbench;
     // ***** DUT  end  ************************
 
 `ifdef ICARUS
-    //iverilog memory dump init workaround
+    // iverilog memory dump init workaround
     initial $dumpvars;
     genvar k;
     for (k = 0; k < 32; k = k + 1) begin
@@ -75,6 +75,7 @@ module sm_testbench;
         reg [31:0] immI;
         reg signed [31:0] immB;
         reg [31:0] immU;
+        reg [31:0] immS;
 
     begin
         cmdOp = sm_top.sm_cpu.cmdOp;
@@ -86,35 +87,46 @@ module sm_testbench;
         immI  = sm_top.sm_cpu.immI;
         immB  = sm_top.sm_cpu.immB;
         immU  = sm_top.sm_cpu.immU;
+        immS  = sm_top.sm_cpu.immS;
 
         $write("   ");
         casez( { cmdF7, cmdF3, cmdOp } )
             default :                                $write ("new/unknown");
-            { `RVF7_ADD,  `RVF3_ADD,  `RVOP_ADD  } : $write ("add   $%1d, $%1d, $%1d", rd, rs1, rs2);
+            { `RVF7_ADD,  `RVF3_ADD,  `RVOP_ADD  } : if (rs2 == 0) $write ("mv   $%1d, $%1d", rd, rs1); 
+                                                     else $write ("add   $%1d, $%1d, $%1d", rd, rs1, rs2);
             { `RVF7_OR,   `RVF3_OR,   `RVOP_OR   } : $write ("or    $%1d, $%1d, $%1d", rd, rs1, rs2);
             { `RVF7_SRL,  `RVF3_SRL,  `RVOP_SRL  } : $write ("srl   $%1d, $%1d, $%1d", rd, rs1, rs2);
             { `RVF7_SLTU, `RVF3_SLTU, `RVOP_SLTU } : $write ("sltu  $%1d, $%1d, $%1d", rd, rs1, rs2);
             { `RVF7_SUB,  `RVF3_SUB,  `RVOP_SUB  } : $write ("sub   $%1d, $%1d, $%1d", rd, rs1, rs2);
 
-            { `RVF7_ANY,  `RVF3_ADDI, `RVOP_ADDI } : $write ("addi  $%1d, $%1d, 0x%8h",rd, rs1, immI);
+            { `RVF7_ANY,  `RVF3_ADDI, `RVOP_ADDI } : if (rs1 == 0 && rd == 0 && immI == 0)
+                                                          $write ("nop");
+                                                     else if (rs1 == 0) $write ("li  $%1d, 0x%8h", rd, immI);
+                                                     else $write ("addi  $%1d, $%1d, 0x%8h", rd, rs1, immI);
             { `RVF7_ANY,  `RVF3_ANY,  `RVOP_LUI  } : $write ("lui   $%1d, 0x%8h",      rd, immU);
 
             { `RVF7_ANY,  `RVF3_BEQ,  `RVOP_BEQ  } : $write ("beq   $%1d, $%1d, 0x%8h (%1d)", rs1, rs2, immB, immB);
             { `RVF7_ANY,  `RVF3_BNE,  `RVOP_BNE  } : $write ("bne   $%1d, $%1d, 0x%8h (%1d)", rs1, rs2, immB, immB);
+
+            { `RVF7_ANY,  `RVF3_WORD, `RVOP_LOAD } : $write ("lw    $%1d, (%1d) $%1d", rd, immI, rs1);
+            { `RVF7_ANY,  `RVF3_WORD,`RVOP_STORE } : $write ("sw    $%1d, (%1d) $%1d", rs2, immS, rs1);
         endcase
     end
     endtask
 
 
-    //simulation debug output
+    // simulation debug output
     integer cycle; initial cycle = 0;
 
     always @ (posedge clk)
     begin
         $write ("%5d  pc = %2h instr = %h   a0 = %1d", 
-                  cycle, sm_top.sm_cpu.pc, sm_top.sm_cpu.instr, sm_top.sm_cpu.rf.rf[10]);
+                  cycle, sm_top.sm_cpu.pc, sm_top.sm_cpu.imData, sm_top.sm_cpu.rf.rf[10]);
 
         disasmInstr();
+
+        if (sm_top.sm_cpu.pcSrc && sm_top.sm_cpu.vld_D) $write(" [Branch miss]");
+        if (sm_top.sm_cpu.makeBubble) $write(" [Bubble insert]");
 
         $write("\n");
 
