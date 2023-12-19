@@ -1,4 +1,5 @@
 project/
+board/de10_lite/p_*
 run/
 sim/
 *.bak

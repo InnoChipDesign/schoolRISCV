@@ -51,7 +51,8 @@ module de10_lite(
         .switches(SW),
         .btns(KEY),
         .hex(hex_driven),
-        .leds(ledr_driven) 
+        .leds(ledr_driven),
+        .gpio(GPIO)
     );
 
     //cores

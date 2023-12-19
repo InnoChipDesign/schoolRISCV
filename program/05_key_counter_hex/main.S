@@ -4,9 +4,10 @@ start:  mv      a0, zero        # set counter to zero
         li      t1, 1           # bit mask for inc
         li      t2, 2           # bit mask for dec
 
-count:  beq, zero, zero, display
+count:  beq     zero, zero, display
 ret:    lw      t0, 0x14 (zero) # load state of the keys
         lw      t5, 0xc  (zero) # load state of the switches
+        sw      t5, 0x4  (zero) # store switches state into LEDs
         and     t3, t0, t1      # is inc set?
         and     t4, t0, t2      # is dec set?
         
